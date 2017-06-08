@@ -32,12 +32,47 @@ class RestoShamanSubAnalyzer {
 		this.shamanHeals.set(207778, "Gift of the Queen");
 		this.shamanHeals.set(73685, "Unleash Life");
 		this.shamanHeals.set(197995, "Wellspring"); // could also be 197997
+		// this.shamanHeals.set(157503, "Cloudburst");
+		// this.shamanHeals.set(114083, "Restorative Mists");
+		// this.shamanHeals.set(114911, "Ancestral Guidance");
 
 		// these spells don't directly benefit from mastery.
 		this.shamanAlreadyMasteryBoostedHeals = new Map();
 		this.shamanAlreadyMasteryBoostedHeals.set(157503, "Cloudburst");
 		this.shamanAlreadyMasteryBoostedHeals.set(114083, "Restorative Mists");
 		this.shamanAlreadyMasteryBoostedHeals.set(114911, "Ancestral Guidance");
+
+		this.shamanBuffs = new Map();
+		this.shamanBuffs.set(157153, "Cloudburst");
+		this.shamanBuffs.set(114052, "Ascendance");
+		this.shamanBuffs.set(108281, "Ancestral Guidance");
+
+		// buff IDs
+		// 242586 = concordance
+		// 53390 = tidal waves
+		// 207288 = queen ascendant
+		// 2645 = ghost wolf
+		// 207527 = ghost in the mist
+		// 77762 = lava surge
+		// 209950 = caress of the tidemother
+		// 216251 = undulation
+		// 108280 = healing tide totem
+		// 235966 = velen's future sight
+		// 224151 = traitor's oath
+		// 108271 = astral shift
+		// 114052 = ascendance
+		// 108281 = ancestral guidance
+		// 208899 = queen's decree 10% hp buff
+		// 207778 = gift of the queen
+		// 79206 = spiritwalker's grace
+		// 2825 = bloodlust
+		// 208416 = sense of urgency
+		// 61295 = riptide
+		// 207654 = servant of the queen
+
+		// todo MAYBE I should attribute the mastery healing from that extra 10% health of future heals on targets
+		// that hace the queen's decree buff to Gift of hte Queen. I already capture the heal... it would just 
+		// move it from other spells into gift of the queen. It should be a small amount and I'm not sure anyone cares.
 
 		//todo calculate value from extra HP from ancestral vigor
 		//this.shamanHeals.set(0, "Ancestral Vigor"); // this is not a spell, but I want to add healing to it manually so I want it 
@@ -52,12 +87,17 @@ class RestoShamanSubAnalyzer {
 		this.totalNonSpellHealing = 0;
 		this.totalNoMasteryHealing = 0; // total healing before mastery
 		this.shamanSpellNoMasteryHealing = 0; // total healing before mastery from spells that benefit from mastery
+
+		this.cloudburstActive = false;
+		this.ancestralGuidanceActive = false;
+		this.ascendanceActive = false;
 		
 		this.spellHealingMap = new Map(); // map from the spell ID to obj with the direct and mastery healing
-		for(let spellId of this.shamanHeals.keys()) {
-			this.spellHealingMap.set(spellId, {'direct':0, 'mastery_amount':0, 'num_heals':0, 'health_percentage':0});
+		for (let spellId of this.shamanHeals.keys()) {
+			this.spellHealingMap.set(spellId, {'direct':0, 'mastery_amount':0, 'mastery_amount_overheal_adj':0 'num_heals':0, 'health_percentage':0});
 			// direct: total amount healed by the spell
 			// mastery_amount: amount of healing from mastery
+			// mastery_amount_overheal_adj: amount of healing done by mastery that wouldn't have been covered by overheals.
 			// num_heals: number of times this spell healed a target
 			// health_percentage: this is a running total of all percentages. It will be divided by num_heals later 
 			//						to get an average % health of targets healed by this spell
@@ -66,7 +106,14 @@ class RestoShamanSubAnalyzer {
 		// these only need the amount they healed logged
 		this.nonspellHealingMap = new Map(); // map from the spell ID to obj with 
 		for (let spellId of this.shamanAlreadyMasteryBoostedHeals.keys()) {
-			this.nonspellHealingMap.set(spellId, {'direct':0});
+			this.nonspellHealingMap.set(spellId, {'direct':0, 'attributable_mastery_amount':0});
+		}
+
+		// there is probably a better way to do this... but since they have different spell IDs I can't
+		// map just by spell Id.
+		this.shamanBuffMap = new Map(); // map from the spell ID to obj with 
+		for (let spellId of this.shamanBuffs.keys()) {
+			this.shamanBuffs.set(spellId, {'active':0}); // active 0 = false, 1 = true;
 		}
 	}
 	
@@ -94,6 +141,12 @@ class RestoShamanSubAnalyzer {
 		}
 		
 		switch( wclEvent.type ) {
+			case 'applybuff' :
+				this.applyBuff(wclEvent);
+				break;
+			case 'removebuff' :
+				this.removeBuff(wclEvent);
+				break;
 			case 'heal' :
 				this.heal(wclEvent);
 				break;
@@ -125,17 +178,60 @@ class RestoShamanSubAnalyzer {
 		let targetId = wclEvent.sourceID; // aura's target is combatantinfo source
 	}
 
+	// parse 'apply buff' event
+	applyBuff(wclEvent) {
+		let targetId = wclEvent.targetID;
+		let buffSpellId = wclEvent.ability.guid;
+
+		if (this.playerId == targetId) {	
+			console.log("applied buff " + buffSpellId + " found");
+
+			for (let [spellId,name] of this.shamanBuffMap.entries()) {
+				console.log("spellId of shamanBuffs entries: " + spellId);
+				if (buffSpellId == spellId) {
+					this.shamanBuffs.get(spellId).active = 1;
+					console.log("buff spellId: " + spellId + " is applied");
+				}
+			}
+		}
+
+	}
+	
+	// parse 'remove buff' event
+	removeBuff(wclEvent) {
+		let targetId = wclEvent.targetID;
+		let buffSpellId = wclEvent.ability.guid;
+
+		if (this.playerId == targetId) {	
+			console.log("applied buff " + buffSpellId + " found");
+
+			for (let [spellId,name] of this.shamanBuffMap.entries()) {
+				console.log("spellId of shamanBuffs entries: " + spellId);
+				if (buffSpellId == spellId) {
+					this.shamanBuffs.get(spellId).active = 0;
+					console.log("buff spellId: " + spellId + " is removed");
+				}
+			}
+		}
+	}
+
 	getHealHealthPercent(healAmount, maxHealth, currentHealth) {
 		let preHealHealth = currentHealth - healAmount;
 		return (preHealHealth / maxHealth) * 100;
 	}
 
 	// TODO not done.
+
+	// should also calculate the crit and vers overhealing done (and haste for hots) for comparison
 	getMasteryHealingAmountOverhealAdjusted(healAmount, overhealAmount, maxHealth, currentHealth) {
 		let hhp = this.getHealHealthPercent(healAmount, maxHealth, currentHealth);
-		let healingAmountFromMastery = hhp * masteryFactor;
+		let masteryFactor = 1 + (getCurrMasteryPercentage()/100 * (100-hhp)/100);
+		let healingAmountFromMastery = getMasteryHealingAmount(healAmount, maxHealth, currentHealth);
+		let nonmasteryOverheal = overhealAmount - (overhealAmount / masteryFactor);
+		// subtract from the mastery healing any non-mastery overhealing that has been done.
+		let overhealAdjusted = Math.max(healingAmountFromMastery - nonmasteryOverheal, 0);
 
-		return Math.round(healingAmountFromMastery);
+		return Math.round(overhealAdjusted);
 	}
 
 	getBaseHeal(healAmount, maxHealth, currentHealth) {
@@ -167,6 +263,7 @@ class RestoShamanSubAnalyzer {
 		let hp = wclEvent.hitPoints;
 
 		let healMasteryAmount = this.getMasteryHealingAmount(amount, maxHP, hp);
+		let healMasteryAmountOverhealAdjusted = this.getMasteryHealingAmountOverhealAdjusted(amount, maxHP, hp);
 		let baseHealAmount = this.getBaseHeal(amount, maxHP, hp);
 		let healHealthPercent = this.getHealHealthPercent(amount, maxHP, hp);
 
@@ -186,6 +283,7 @@ class RestoShamanSubAnalyzer {
 			this.spellHealingMap.get(spellId).num_heals++;
 			this.spellHealingMap.get(spellId).health_percentage += healHealthPercent; 
 			this.spellHealingMap.get(spellId).mastery_amount += healMasteryAmount;
+			this.spellHealingMap.get(spellId).mastery_amount_overheal_adj += healMasteryAmountOverhealAdjusted;
 			this.totalNoMasteryHealing += baseHealAmount;
 
 		} else if (this.shamanAlreadyMasteryBoostedHeals.has(spellId)) {
@@ -215,6 +313,8 @@ class RestoShamanSubAnalyzer {
 				.appendTo(res);
 				
 		let avgTotalMasteryHealing =
+				roundTo(this.totalHealing - this.totalNoMasteryHealing - this.totalNonSpellHealing, 2);
+		let avgTotalMasteryHealingOverhealingAdjusted = 
 				roundTo(this.totalHealing - this.totalNoMasteryHealing - this.totalNonSpellHealing, 2);
 		let percentageMasteryHealing = 
 				roundTo((avgTotalMasteryHealing/(this.totalHealing-this.totalNonSpellHealing)) * 100, 2);
