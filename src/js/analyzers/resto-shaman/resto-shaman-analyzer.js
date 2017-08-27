@@ -1,23 +1,23 @@
 /**
  * RESTO SHAMAN ANALYZER
- *		
+ *
  *	Calculates the benefit of a resto shaman's mastery.
  *	Includes:
  *		- Mean health of t
  *		- Amount of healing benefit, both as a raw number and as a % of your total healing.
  *
  */
-class RestoShamanSubAnalyzer {
-	
+class RestoShamanAnalyzer {
+
 	constructor(playerName, playerInfo, fight, enemyNameMapping) {
 		this.playerName = playerName;
 		this.playerInfo = playerInfo;
 		this.fight = fight;
 		this.enemyNameMapping = enemyNameMapping;
-		
+
 		this.shamanBlueColor = '2359ff';
 		this.darkGrayColor = '888888';
-		
+
 		// these are the spells that can be boosted by Mastery
 		this.shamanHeals = new Map();
 		this.shamanHeals.set(1064, "Chain Heal");
@@ -40,36 +40,36 @@ class RestoShamanSubAnalyzer {
 		this.shamanAlreadyMasteryBoostedHeals.set(114911, "Ancestral Guidance");
 
 		//todo calculate value from extra HP from ancestral vigor
-		//this.shamanHeals.set(0, "Ancestral Vigor"); // this is not a spell, but I want to add healing to it manually so I want it 
-		
+		//this.shamanHeals.set(0, "Ancestral Vigor"); // this is not a spell, but I want to add healing to it manually so I want it
+
 		this.baseMasteryPercent = 21;
 		this.masteryRatingPerOne = 133.33;
-		
+
 		this.playerId = this.playerInfo.sourceID;
 		this.baseMasteryRating = this.playerInfo.mastery;
-		
+
 		this.totalHealing = 0; // total healing from all spells
 		this.totalNonSpellHealing = 0;
 		this.totalNoMasteryHealing = 0; // total healing before mastery
 		this.shamanSpellNoMasteryHealing = 0; // total healing before mastery from spells that benefit from mastery
-		
+
 		this.spellHealingMap = new Map(); // map from the spell ID to obj with the direct and mastery healing
 		for(let spellId of this.shamanHeals.keys()) {
 			this.spellHealingMap.set(spellId, {'direct':0, 'mastery_amount':0, 'num_heals':0, 'health_percentage':0});
 			// direct: total amount healed by the spell
 			// mastery_amount: amount of healing from mastery
 			// num_heals: number of times this spell healed a target
-			// health_percentage: this is a running total of all percentages. It will be divided by num_heals later 
+			// health_percentage: this is a running total of all percentages. It will be divided by num_heals later
 			//						to get an average % health of targets healed by this spell
 		}
 
 		// these only need the amount they healed logged
-		this.nonspellHealingMap = new Map(); // map from the spell ID to obj with 
+		this.nonspellHealingMap = new Map(); // map from the spell ID to obj with
 		for (let spellId of this.shamanAlreadyMasteryBoostedHeals.keys()) {
 			this.nonspellHealingMap.set(spellId, {'direct':0});
 		}
 	}
-	
+
 	/*
 	 * Methodology:
 	 * Per friendly target, track their current health. When analyzed spells
@@ -77,22 +77,22 @@ class RestoShamanSubAnalyzer {
 	 * that to a running total. Be careful to handle overhealing correctly by
 	 * only adding the contribution from mastery that did not go into more
 	 * overhealing.
-	 * 
+	 *
 	 * Want to track the avg % health of targets healed, per spell, weighted by amount healed.
-	 * 
+	 *
 	 * Shortcomings:
 	 * Does not handle mastery buffs/procs that happen in the middle of the fight.
 	 */
 	 parse(wclEvent) {
-		 
+
 		if(wclEvent.type === 'combatantinfo') {
 			this.combatantInfo(wclEvent);
 		}
-		 
+
 		if(wclEvent.sourceID !== this.playerId) {
 			return;
 		}
-		
+
 		switch( wclEvent.type ) {
 			case 'heal' :
 				this.heal(wclEvent);
@@ -104,24 +104,24 @@ class RestoShamanSubAnalyzer {
 		}
 	}
 
-	// to calculate the value of mastery we use the following forumulas: 
+	// to calculate the value of mastery we use the following forumulas:
 	// 	base heal + mastery contribution = total heal
 	// base heal + base heal * mastery multiplier = total heal
 	// base heal + base heal * (mastery % / 100) * (health % / 100) = total heal
-	
+
 	// mastery contribution = base heal * (mastery % / 100) * (health % / 100)
-	
+
 	// in order to know the mastery contribution, we need to calculate the base heal:
 	// base heal + base heal * (mastery % / 100) * (health % / 100) = total heal
 	// base heal (1 + (1 * (mastery % / 100) * (health % / 100))) = total heal
 	// base heal = total heal / (1 + (1 * (mastery % / 100) * (health % / 100)))
-	
+
 	// THEREFORE
-	
+
 	// mastery contribution = total heal / (1 + (1 * (mastery % / 100) * (health % / 100))) * (mastery % / 100) * (health % / 100)
-	
+
 	// parse 'combatantinfo' event
-	combatantInfo(wclEvent) {	
+	combatantInfo(wclEvent) {
 		let targetId = wclEvent.sourceID; // aura's target is combatantinfo source
 	}
 
@@ -155,12 +155,12 @@ class RestoShamanSubAnalyzer {
 		// but I already made the get base heal function which has the same math, so might as well just subtract from healAmount.
 		return Math.round(healAmount - this.getBaseHeal(healAmount, maxHealth, currentHealth));
 	}
-	
+
 	// parse 'heal' event
 	heal(wclEvent) {
 		let targetId = wclEvent.targetID;
 		let spellId = wclEvent.ability.guid;
-		
+
 		let amount = wclEvent.amount;
 		let overhealAmount = wclEvent.overheal;
 		let maxHP = wclEvent.maxHitPoints;
@@ -173,18 +173,18 @@ class RestoShamanSubAnalyzer {
 		if (wclEvent.absorbed !== undefined) { // absorbed healing is effective healing
 			amount+= wclEvent.absorbed;
 		}
-		
+
 		this.totalHealing += amount;
-		
+
 		if (this.spellHealingMap.has(spellId)) {
 			this.spellHealingMap.get(spellId).direct += amount;
 		} else if (this.nonspellHealingMap.has(spellId)) {
 			this.nonspellHealingMap.get(spellId).direct += amount;
 		}
-		
+
 		if (this.shamanHeals.has(spellId)) { // spell was boosted by mastery
 			this.spellHealingMap.get(spellId).num_heals++;
-			this.spellHealingMap.get(spellId).health_percentage += healHealthPercent; 
+			this.spellHealingMap.get(spellId).health_percentage += healHealthPercent;
 			this.spellHealingMap.get(spellId).mastery_amount += healMasteryAmount;
 			this.totalNoMasteryHealing += baseHealAmount;
 
@@ -196,27 +196,27 @@ class RestoShamanSubAnalyzer {
 			this.totalNoMasteryHealing += amount;
 		}
 	}
-	
+
 	// parse 'absorbed' event
 	absorbed(wclEvent) {
 		// absorbs don't interact with mastery, but they do count towards total healing
 		this.totalHealing += wclEvent.amount;
 		this.totalNoMasteryHealing += wclEvent.amount;
 	}
-	
+
 	getResult() {
 		let res = $('<div>', {"class":"panel panel-default"});
-		
+
 		let playerNameElement = $('<div>', {"class":"panel-heading"})
 				.html(toColorHtml("<b>" + this.playerName + " 🍂</br>", this.shamanBlueColor))
 				.appendTo(res);
-		
+
 		let spellListElement = $('<ul>', {"class":"list-group"})
 				.appendTo(res);
-				
+
 		let avgTotalMasteryHealing =
 				roundTo(this.totalHealing - this.totalNoMasteryHealing - this.totalNonSpellHealing, 2);
-		let percentageMasteryHealing = 
+		let percentageMasteryHealing =
 				roundTo((avgTotalMasteryHealing/(this.totalHealing-this.totalNonSpellHealing)) * 100, 2);
 
 		// add the average mastery healing amount at the top.
@@ -225,7 +225,7 @@ class RestoShamanSubAnalyzer {
 						"&emsp;Raw Healing Due to Mastery: <b>" + avgTotalMasteryHealing.toLocaleString() + "</b><br>" +
 						"&emsp;Mastery Healing as % of Total Healing: <b>" + percentageMasteryHealing + "%</b><br>")
 				.appendTo(spellListElement);
-		
+
 		// add report for each spell
 		let spellText = "<p><b>Spell Mastery Contributions</b></p>";
 		for(let [spellId, spellHealingObj] of this.spellHealingMap.entries()) {
@@ -235,10 +235,10 @@ class RestoShamanSubAnalyzer {
 			} else {
 				console.log("Healing from spell ID " + spellId);
 			}
-			
+
 			let directPercent = roundTo(spellHealingObj.direct / (this.totalHealing - this.totalNonSpellHealing) * 100, 1);
 			let masteryPercent = roundTo((spellHealingObj.mastery_amount / (this.totalHealing - this.totalNonSpellHealing)) * 100, 1);
-			let avgTargetHealth = roundTo((this.spellHealingMap.get(spellId).health_percentage / this.spellHealingMap.get(spellId).num_heals), 2);		
+			let avgTargetHealth = roundTo((this.spellHealingMap.get(spellId).health_percentage / this.spellHealingMap.get(spellId).num_heals), 2);
 			spellText += "<p>&emsp;" + getSpellLinkHtml(spellId, this.shamanHeals.get(spellId)) +
 					'<br>&emsp;&emsp;Direct: <b>' + directPercent + "%</b> " +
 					toColorHtml("(" + spellHealingObj.direct.toLocaleString() + ")", this.darkGrayColor) +
@@ -251,19 +251,19 @@ class RestoShamanSubAnalyzer {
 		$('<li>', {"class":"list-group-item small"})
 				.html(spellText)
 				.appendTo(spellListElement);
-		
+
 		// report raw total healing done
 		$('<li>', {"class":"list-group-item small"})
 				.html(toColorHtml("Total Healing: " + this.totalHealing.toLocaleString(), this.darkGrayColor))
 				.appendTo(spellListElement);
-		
+
 		return res;
 	}
 
 	// uses curr mastery rating (including buffs), and calcs mastery % from it
 	getCurrMasteryPercentage() {
 		let currMasteryRating = this.baseMasteryRating;
-		
+
 		return this.masteryRatingToBonus(currMasteryRating) * 100;
 	}
 
@@ -271,6 +271,6 @@ class RestoShamanSubAnalyzer {
 	masteryRatingToBonus(rating) {
 		return (this.baseMasteryPercent + (rating / this.masteryRatingPerOne)) / 100;
 	}
-	
+
 }
 
