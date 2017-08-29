@@ -86,9 +86,9 @@ class RestoDruidAnalyzer {
 				'int':true, 'mastery_boost':true, 'mastery':true,
 				'crit':true, 'haste_hpm':true, 'haste_hpct':false, 'vers':true
 				});
-		this.heals.set(22842, {'name':"Frenzied Regeneration", //TODO is mastery: true correct?
-				'int':false, 'mastery_boost':true, 'mastery':true,
-				'crit':true, 'haste_hpm':false, 'haste_hpct':false, 'vers':true
+		this.heals.set(22842, {'name':"Frenzied Regeneration",
+				'int':false, 'mastery_boost':true, 'mastery':false,
+				'crit':false, 'haste_hpm':false, 'haste_hpct':false, 'vers':false
 				});
 		this.heals.set(5185, {'name':"Healing Touch",
 				'int':true, 'mastery_boost':false, 'mastery':true,
@@ -158,6 +158,7 @@ class RestoDruidAnalyzer {
 		// heals to not include when generating stat weights
 		this.statWeightBlacklist = new Set();
 		this.statWeightBlacklist.add(157982); // Tranquility
+		this.statWeightBlacklist.add(235967); // Velen's 
 		
 		//// MASTERY ATTRIBUTION TO SPELLS AND PROCS ////
 		
@@ -580,6 +581,25 @@ class RestoDruidAnalyzer {
 				"\nCrit: " + roundTo(this.totalCritBenefitHealing / this.totalHealing, 2) +
 				"\nHaste: " + roundTo(this.totalHasteHpmBenefitHealing / this.totalHealing, 2) +
 				"\nVers: " + roundTo(this.totalVersBenefitHealing / this.totalHealing, 2));
+				
+		// console log the weights normalized like RDSW (for easier comparison)
+		let highest = this.totalOneInt;
+		if(this.totalOneCrit > highest) { highest = this.totalOneCrit; }
+		if(this.totalOneHasteHpm > highest) { highest = this.totalOneHasteHpm; }
+		if(this.totalOneMastery > highest) { highest = this.totalOneMastery; }
+		if(this.normalizedOneVers > highest) { highest = this.normalizedOneVers; }
+		let normalizedOneIntHighest = this.totalOneInt / highest;
+		let normalizedOneCritHighest = this.totalOneCrit / highest;
+		let normalizedOneHasteHighest = this.totalOneHasteHpm / highest;
+		let normalizedOneMasteryHighest = this.totalOneMastery / highest;
+		let normalizedOneVersHighest = this.totalOneVers / highest;
+		console.log("Weights displayed as RDSW would:" +
+				"\nINT: " + roundTo(normalizedOneIntHighest, 2) +
+				"\nCRT: " + roundTo(normalizedOneCritHighest, 2) +
+				"\nHST: " + roundTo(normalizedOneHasteHighest, 2) +
+				"\nMST: " + roundTo(normalizedOneMasteryHighest, 2) +
+				"\nVRS: " + roundTo(normalizedOneVersHighest, 2));
+		
 		
 		// relative stat weights normalized so int = 1.00
 		// TODO error check for no healing doesn't cause divide by zero
